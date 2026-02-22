@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Bienvenido a Urbano Express</h2>
+{% if mensaje %}
+<p>{{ mensaje }}</p>
+{% else %}
+<p>Gestión de pedidos y delivery urbano rápido y confiable.</p>
+{% endif %}
+{% endblock %}
