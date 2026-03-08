@@ -1,5 +1,7 @@
 from flask import Flask, render_template, request, redirect
 import sqlite3
+import json
+import csv
 
 app = Flask(__name__)
 
@@ -51,6 +53,42 @@ class Inventario:
 inventario = Inventario()
 
 # ===============================
+# GUARDAR DATOS EN ARCHIVOS
+# ===============================
+
+def guardar_txt(nombre, cantidad, precio):
+
+    with open("inventario/data/datos.txt", "a") as f:
+        f.write(f"{nombre},{cantidad},{precio}\n")
+
+
+def guardar_json(nombre, cantidad, precio):
+
+    datos = {
+        "nombre": nombre,
+        "cantidad": cantidad,
+        "precio": precio
+    }
+
+    try:
+        with open("inventario/data/datos.json", "r") as f:
+            lista = json.load(f)
+    except:
+        lista = []
+
+    lista.append(datos)
+
+    with open("inventario/data/datos.json", "w") as f:
+        json.dump(lista, f, indent=4)
+
+
+def guardar_csv(nombre, cantidad, precio):
+
+    with open("inventario/data/datos.csv", "a", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([nombre, cantidad, precio])
+
+# ===============================
 # RUTAS 
 # ===============================
 
@@ -90,7 +128,7 @@ def factura(numero):
     return render_template('factura.html', titulo="Factura", mensaje=mensaje)
 
 # ===============================
-# NUEVO: INVENTARIO
+# INVENTARIO
 # ===============================
 
 # Mostrar productos
@@ -104,6 +142,7 @@ def ver_inventario():
 # Agregar producto
 @app.route('/agregar_producto', methods=["POST"])
 def agregar_producto():
+
     nombre = request.form["nombre"]
     cantidad = request.form["cantidad"]
     precio = request.form["precio"]
@@ -112,24 +151,47 @@ def agregar_producto():
     inventario.agregar(nuevo)
 
     conn = conectar()
-    conn.execute("INSERT INTO productos (nombre, cantidad, precio) VALUES (?, ?, ?)",
-                 (nombre, cantidad, precio))
+    conn.execute(
+        "INSERT INTO productos (nombre, cantidad, precio) VALUES (?, ?, ?)",
+        (nombre, cantidad, precio)
+    )
     conn.commit()
     conn.close()
+
+    # GUARDAR EN ARCHIVOS
+    guardar_txt(nombre, cantidad, precio)
+    guardar_json(nombre, cantidad, precio)
+    guardar_csv(nombre, cantidad, precio)
 
     return redirect('/inventario')
 
 # Eliminar producto
 @app.route('/eliminar_producto/<int:id>')
 def eliminar_producto(id):
+
     conn = conectar()
     conn.execute("DELETE FROM productos WHERE id=?", (id,))
     conn.commit()
     conn.close()
+
     return redirect('/inventario')
+
+# ===============================
+# MOSTRAR DATOS EN HTML
+# ===============================
+
+@app.route('/datos')
+def ver_datos():
+
+    conn = conectar()
+    productos = conn.execute("SELECT * FROM productos").fetchall()
+    conn.close()
+
+    return render_template("datos.html", productos=productos)
 
 # ===============================
 # EJECUTAR APP
 # ===============================
+
 if __name__ == '__main__':
     app.run(debug=True)

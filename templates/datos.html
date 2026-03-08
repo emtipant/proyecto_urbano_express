@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<h2>Datos almacenados</h2>
+
+{% for p in productos %}
+
+<p>
+{{ p.nombre }} - {{ p.cantidad }} unidades - ${{ p.precio }}
+</p>
+
+{% endfor %}
+
+{% endblock %}
