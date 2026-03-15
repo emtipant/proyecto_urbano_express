@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<h2>Usuarios</h2>
+
+<form action="/agregar_usuario" method="POST">
+
+<input type="text" name="nombre" placeholder="Nombre">
+<input type="email" name="mail" placeholder="Email">
+<input type="text" name="password" placeholder="Password">
+
+<button type="submit">Guardar</button>
+
+</form>
+
+<hr>
+
+<table border="1">
+
+<tr>
+<th>ID</th>
+<th>Nombre</th>
+<th>Email</th>
+</tr>
+
+{% for u in usuarios %}
+
+<tr>
+<td>{{u[0]}}</td>
+<td>{{u[1]}}</td>
+<td>{{u[2]}}</td>
+</tr>
+
+{% endfor %}
+
+</table>
+
+{% endblock %}

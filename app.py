@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect
 import sqlite3
 import json
 import csv
+import mysql.connector
 
 app = Flask(__name__)
 
@@ -14,7 +15,21 @@ def conectar():
     return conn
 
 # ===============================
-# CREAR TABLA PRODUCTOS
+# CONEXIÓN A MYSQL
+# ===============================
+def conectar_mysql():
+
+    conexion = mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="1234",  
+        database="urbano_express"
+    )
+
+    return conexion
+
+# ===============================
+# CREAR TABLA PRODUCTOS SQLITE
 # ===============================
 def crear_tabla():
     conn = conectar()
@@ -41,7 +56,7 @@ class Producto:
         self.precio = precio
 
 # ===============================
-# CLASE INVENTARIO (DICCIONARIO)
+# CLASE INVENTARIO
 # ===============================
 class Inventario:
     def __init__(self):
@@ -89,7 +104,7 @@ def guardar_csv(nombre, cantidad, precio):
         writer.writerow([nombre, cantidad, precio])
 
 # ===============================
-# RUTAS 
+# RUTAS PRINCIPALES
 # ===============================
 
 @app.route('/')
@@ -128,10 +143,9 @@ def factura(numero):
     return render_template('factura.html', titulo="Factura", mensaje=mensaje)
 
 # ===============================
-# INVENTARIO
+# INVENTARIO SQLITE
 # ===============================
 
-# Mostrar productos
 @app.route('/inventario')
 def ver_inventario():
     conn = conectar()
@@ -139,7 +153,6 @@ def ver_inventario():
     conn.close()
     return render_template("inventario.html", productos=productos)
 
-# Agregar producto
 @app.route('/agregar_producto', methods=["POST"])
 def agregar_producto():
 
@@ -158,14 +171,12 @@ def agregar_producto():
     conn.commit()
     conn.close()
 
-    # GUARDAR EN ARCHIVOS
     guardar_txt(nombre, cantidad, precio)
     guardar_json(nombre, cantidad, precio)
     guardar_csv(nombre, cantidad, precio)
 
-    return redirect('/inventario')
+    return redirect('/inventario/data')
 
-# Eliminar producto
 @app.route('/eliminar_producto/<int:id>')
 def eliminar_producto(id):
 
@@ -177,7 +188,7 @@ def eliminar_producto(id):
     return redirect('/inventario')
 
 # ===============================
-# MOSTRAR DATOS EN HTML
+# MOSTRAR DATOS
 # ===============================
 
 @app.route('/datos')
@@ -188,6 +199,46 @@ def ver_datos():
     conn.close()
 
     return render_template("datos.html", productos=productos)
+
+# ===============================
+# MYSQL USUARIOS
+# ===============================
+
+@app.route('/usuarios')
+def usuarios():
+
+    conn = conectar_mysql()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id_usuario, nombre, mail FROM usuarios")
+
+    usuarios = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return render_template("usuarios.html", usuarios=usuarios)
+
+@app.route('/agregar_usuario', methods=['POST'])
+def agregar_usuario():
+
+    nombre = request.form['nombre']
+    mail = request.form['mail']
+    password = request.form['password']
+
+    conn = conectar_mysql()
+    cursor = conn.cursor()
+
+    sql = "INSERT INTO usuarios (nombre, mail, password) VALUES (%s,%s,%s)"
+    valores = (nombre, mail, password)
+
+    cursor.execute(sql, valores)
+    conn.commit()
+
+    cursor.close()
+    conn.close()
+
+    return redirect('/usuarios')
 
 # ===============================
 # EJECUTAR APP
