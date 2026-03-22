@@ -4,7 +4,18 @@ import json
 import csv
 import mysql.connector
 
+# 🔐 LOGIN (AGREGADO)
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user
+
 app = Flask(__name__)
+app.secret_key = "123456"
+
+# ===============================
+# LOGIN CONFIG (AGREGADO)
+# ===============================
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "login"
 
 # ===============================
 # CONEXIÓN A SQLITE
@@ -18,15 +29,38 @@ def conectar():
 # CONEXIÓN A MYSQL
 # ===============================
 def conectar_mysql():
-
-    conexion = mysql.connector.connect(
+    return mysql.connector.connect(
         host="localhost",
         user="root",
         password="1234",  
         database="urbano_express"
     )
 
-    return conexion
+# ===============================
+# CLASE USUARIO (AGREGADO)
+# ===============================
+class Usuario(UserMixin):
+    def __init__(self, id, nombre, mail, password):
+        self.id = id
+        self.nombre = nombre
+        self.mail = mail
+        self.password = password
+
+# ===============================
+# CARGAR USUARIO (AGREGADO)
+# ===============================
+@login_manager.user_loader
+def load_user(user_id):
+    conn = conectar_mysql()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id_usuario, nombre, mail, password FROM usuarios WHERE id_usuario=%s", (user_id,))
+    user = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    if user:
+        return Usuario(user[0], user[1], user[2], user[3])
+    return None
 
 # ===============================
 # CREAR TABLA PRODUCTOS SQLITE
@@ -47,61 +81,38 @@ def crear_tabla():
 crear_tabla()
 
 # ===============================
-# CLASE PRODUCTO (POO)
+# LOGIN (AGREGADO)
 # ===============================
-class Producto:
-    def __init__(self, nombre, cantidad, precio):
-        self.nombre = nombre
-        self.cantidad = cantidad
-        self.precio = precio
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        mail = request.form['mail']
+        password = request.form['password']
+
+        conn = conectar_mysql()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id_usuario, nombre, mail, password FROM usuarios WHERE mail=%s", (mail,))
+        user = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if user and user[3] == password:
+            usuario = Usuario(user[0], user[1], user[2], user[3])
+            login_user(usuario)
+            return redirect('/inventario')
+
+        return "Datos incorrectos"
+
+    return render_template('login.html')
 
 # ===============================
-# CLASE INVENTARIO
+# LOGOUT (AGREGADO)
 # ===============================
-class Inventario:
-    def __init__(self):
-        self.productos = {}
-
-    def agregar(self, producto):
-        self.productos[producto.nombre] = producto
-
-inventario = Inventario()
-
-# ===============================
-# GUARDAR DATOS EN ARCHIVOS
-# ===============================
-
-def guardar_txt(nombre, cantidad, precio):
-
-    with open("inventario/data/datos.txt", "a") as f:
-        f.write(f"{nombre},{cantidad},{precio}\n")
-
-
-def guardar_json(nombre, cantidad, precio):
-
-    datos = {
-        "nombre": nombre,
-        "cantidad": cantidad,
-        "precio": precio
-    }
-
-    try:
-        with open("inventario/data/datos.json", "r") as f:
-            lista = json.load(f)
-    except:
-        lista = []
-
-    lista.append(datos)
-
-    with open("inventario/data/datos.json", "w") as f:
-        json.dump(lista, f, indent=4)
-
-
-def guardar_csv(nombre, cantidad, precio):
-
-    with open("inventario/data/datos.csv", "a", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow([nombre, cantidad, precio])
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect('/login')
 
 # ===============================
 # RUTAS PRINCIPALES
@@ -143,10 +154,11 @@ def factura(numero):
     return render_template('factura.html', titulo="Factura", mensaje=mensaje)
 
 # ===============================
-# INVENTARIO SQLITE
+# INVENTARIO SQLITE (PROTEGIDO)
 # ===============================
 
 @app.route('/inventario')
+@login_required
 def ver_inventario():
     conn = conectar()
     productos = conn.execute("SELECT * FROM productos").fetchall()
@@ -154,6 +166,7 @@ def ver_inventario():
     return render_template("inventario.html", productos=productos)
 
 @app.route('/agregar_producto', methods=["POST"])
+@login_required
 def agregar_producto():
 
     nombre = request.form["nombre"]
@@ -175,9 +188,10 @@ def agregar_producto():
     guardar_json(nombre, cantidad, precio)
     guardar_csv(nombre, cantidad, precio)
 
-    return redirect('/inventario/data')
+    return redirect('/inventario')
 
 @app.route('/eliminar_producto/<int:id>')
+@login_required
 def eliminar_producto(id):
 
     conn = conectar()
