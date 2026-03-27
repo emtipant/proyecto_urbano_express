@@ -4,7 +4,8 @@
 
 <h2>Inventario Urbano Express</h2>
 
-<form action="/agregar" method="POST">
+<!-- FORMULARIO -->
+<form action="/agregar_producto" method="POST">
     <input type="text" name="nombre" placeholder="Nombre del producto" required>
     <input type="number" name="cantidad" placeholder="Cantidad" required>
     <input type="number" step="0.01" name="precio" placeholder="Precio" required>
@@ -13,13 +14,14 @@
 
 <hr>
 
+<!-- TABLA -->
 <table border="1">
     <tr>
         <th>ID</th>
         <th>Nombre</th>
         <th>Cantidad</th>
         <th>Precio</th>
-        <th>Acción</th>
+        <th>Acciones</th>
     </tr>
 
     {% for p in productos %}
@@ -29,10 +31,18 @@
         <td>{{ p[2] }}</td>
         <td>{{ p[3] }}</td>
         <td>
-            <a href="/eliminar/{{ p[0] }}">Eliminar</a>
+            <a href="/editar_producto/{{ p[0] }}">Editar</a> |
+            <a href="/eliminar_producto/{{ p[0] }}">Eliminar</a>
         </td>
     </tr>
     {% endfor %}
 </table>
+
+<br>
+
+<!-- BOTÓN PDF -->
+<a href="/reporte_pdf">
+    <button>Descargar PDF</button>
+</a>
 
 {% endblock %}

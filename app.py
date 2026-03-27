@@ -1,24 +1,25 @@
-from flask import Flask, render_template, request, redirect
+from flask import Flask, render_template, request, redirect, make_response
 import sqlite3
 import json
 import csv
 import mysql.connector
+from fpdf import FPDF
 
-# 🔐 LOGIN (AGREGADO)
+# 🔐 LOGIN
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user
 
 app = Flask(__name__)
 app.secret_key = "123456"
 
 # ===============================
-# LOGIN CONFIG (AGREGADO)
+# LOGIN CONFIG
 # ===============================
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
 
 # ===============================
-# CONEXIÓN A SQLITE
+# CONEXIÓN SQLITE
 # ===============================
 def conectar():
     conn = sqlite3.connect("urbano.db")
@@ -26,18 +27,18 @@ def conectar():
     return conn
 
 # ===============================
-# CONEXIÓN A MYSQL
+# CONEXIÓN MYSQL
 # ===============================
 def conectar_mysql():
     return mysql.connector.connect(
         host="localhost",
         user="root",
-        password="1234",  
+        password="1234",
         database="urbano_express"
     )
 
 # ===============================
-# CLASE USUARIO (AGREGADO)
+# CLASE USUARIO
 # ===============================
 class Usuario(UserMixin):
     def __init__(self, id, nombre, mail, password):
@@ -47,7 +48,7 @@ class Usuario(UserMixin):
         self.password = password
 
 # ===============================
-# CARGAR USUARIO (AGREGADO)
+# CARGAR USUARIO
 # ===============================
 @login_manager.user_loader
 def load_user(user_id):
@@ -63,7 +64,51 @@ def load_user(user_id):
     return None
 
 # ===============================
-# CREAR TABLA PRODUCTOS SQLITE
+# CLASE PRODUCTO
+# ===============================
+class Producto:
+    def __init__(self, nombre, cantidad, precio):
+        self.nombre = nombre
+        self.cantidad = cantidad
+        self.precio = precio
+
+# ===============================
+# INVENTARIO
+# ===============================
+class Inventario:
+    def __init__(self):
+        self.productos = {}
+
+    def agregar(self, producto):
+        self.productos[producto.nombre] = producto
+
+inventario = Inventario()
+
+# ===============================
+# GUARDAR DATOS
+# ===============================
+def guardar_txt(nombre, cantidad, precio):
+    with open("datos.txt", "a") as f:
+        f.write(f"{nombre},{cantidad},{precio}\n")
+
+def guardar_json(nombre, cantidad, precio):
+    datos = {"nombre": nombre, "cantidad": cantidad, "precio": precio}
+    try:
+        with open("datos.json", "r") as f:
+            lista = json.load(f)
+    except:
+        lista = []
+    lista.append(datos)
+    with open("datos.json", "w") as f:
+        json.dump(lista, f, indent=4)
+
+def guardar_csv(nombre, cantidad, precio):
+    with open("datos.csv", "a", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([nombre, cantidad, precio])
+
+# ===============================
+# CREAR TABLA SQLITE
 # ===============================
 def crear_tabla():
     conn = conectar()
@@ -81,7 +126,7 @@ def crear_tabla():
 crear_tabla()
 
 # ===============================
-# LOGIN (AGREGADO)
+# LOGIN
 # ===============================
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -105,9 +150,6 @@ def login():
 
     return render_template('login.html')
 
-# ===============================
-# LOGOUT (AGREGADO)
-# ===============================
 @app.route('/logout')
 @login_required
 def logout():
@@ -117,46 +159,18 @@ def logout():
 # ===============================
 # RUTAS PRINCIPALES
 # ===============================
-
 @app.route('/')
 def inicio():
-    return render_template('index.html', 
-                           titulo="Inicio", 
+    return render_template('index.html', titulo="Inicio",
                            mensaje="Bienvenido a Urbano Express - Sistema de Delivery Urbano")
 
 @app.route('/about')
 def about():
     return render_template('about.html', titulo="Acerca de")
 
-@app.route('/pedido/<cliente>')
-def pedido(cliente):
-    mensaje = f"Hola {cliente}, tu pedido está en proceso de envío."
-    return render_template('pedido.html', titulo="Pedido", mensaje=mensaje)
-
-@app.route('/seguimiento/<codigo>')
-def seguimiento(codigo):
-    mensaje = f"El pedido con código {codigo} está en camino."
-    return render_template('seguimiento.html', titulo="Seguimiento", mensaje=mensaje)
-
-@app.route('/clientes/<nombre>')
-def clientes(nombre):
-    mensaje = f"Información del cliente: {nombre}"
-    return render_template('cliente.html', titulo="Cliente", mensaje=mensaje)
-
-@app.route('/producto/<codigo>')
-def producto(codigo):
-    mensaje = f"Detalle del producto con código {codigo}"
-    return render_template('producto.html', titulo="Producto", mensaje=mensaje)
-
-@app.route('/factura/<numero>')
-def factura(numero):
-    mensaje = f"Detalle de la factura número {numero}"
-    return render_template('factura.html', titulo="Factura", mensaje=mensaje)
-
 # ===============================
-# INVENTARIO SQLITE (PROTEGIDO)
+# INVENTARIO (CRUD)
 # ===============================
-
 @app.route('/inventario')
 @login_required
 def ver_inventario():
@@ -168,7 +182,6 @@ def ver_inventario():
 @app.route('/agregar_producto', methods=["POST"])
 @login_required
 def agregar_producto():
-
     nombre = request.form["nombre"]
     cantidad = request.form["cantidad"]
     precio = request.form["precio"]
@@ -193,49 +206,72 @@ def agregar_producto():
 @app.route('/eliminar_producto/<int:id>')
 @login_required
 def eliminar_producto(id):
-
     conn = conectar()
     conn.execute("DELETE FROM productos WHERE id=?", (id,))
     conn.commit()
     conn.close()
-
     return redirect('/inventario')
 
-# ===============================
-# MOSTRAR DATOS
-# ===============================
+@app.route('/editar_producto/<int:id>', methods=['GET', 'POST'])
+@login_required
+def editar_producto(id):
+    conn = conectar()
+    cursor = conn.cursor()
 
-@app.route('/datos')
-def ver_datos():
+    if request.method == 'POST':
+        nombre = request.form['nombre']
+        cantidad = request.form['cantidad']
+        precio = request.form['precio']
 
+        cursor.execute("UPDATE productos SET nombre=?, cantidad=?, precio=? WHERE id=?",
+                       (nombre, cantidad, precio, id))
+        conn.commit()
+        conn.close()
+        return redirect('/inventario')
+
+    producto = cursor.execute("SELECT * FROM productos WHERE id=?", (id,)).fetchone()
+    conn.close()
+    return render_template('editar_producto.html', producto=producto)
+
+# ===============================
+# PDF
+# ===============================
+@app.route('/reporte_pdf')
+@login_required
+def reporte_pdf():
     conn = conectar()
     productos = conn.execute("SELECT * FROM productos").fetchall()
     conn.close()
 
-    return render_template("datos.html", productos=productos)
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt="Reporte de Productos", ln=True)
+
+    for p in productos:
+        pdf.cell(200, 10, txt=f"{p[1]} - {p[3]}", ln=True)
+
+    response = make_response(pdf.output(dest='S').encode('latin-1'))
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = 'attachment; filename=reporte.pdf'
+
+    return response
 
 # ===============================
 # MYSQL USUARIOS
 # ===============================
-
 @app.route('/usuarios')
 def usuarios():
-
     conn = conectar_mysql()
     cursor = conn.cursor()
-
     cursor.execute("SELECT id_usuario, nombre, mail FROM usuarios")
-
     usuarios = cursor.fetchall()
-
     cursor.close()
     conn.close()
-
     return render_template("usuarios.html", usuarios=usuarios)
 
 @app.route('/agregar_usuario', methods=['POST'])
 def agregar_usuario():
-
     nombre = request.form['nombre']
     mail = request.form['mail']
     password = request.form['password']
@@ -244,19 +280,15 @@ def agregar_usuario():
     cursor = conn.cursor()
 
     sql = "INSERT INTO usuarios (nombre, mail, password) VALUES (%s,%s,%s)"
-    valores = (nombre, mail, password)
-
-    cursor.execute(sql, valores)
+    cursor.execute(sql, (nombre, mail, password))
     conn.commit()
 
     cursor.close()
     conn.close()
-
     return redirect('/usuarios')
 
 # ===============================
-# EJECUTAR APP
+# EJECUTAR
 # ===============================
-
 if __name__ == '__main__':
     app.run(debug=True)
